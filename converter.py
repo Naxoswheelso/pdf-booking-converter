@@ -95,17 +95,44 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     if not re.search(r"\d", phone):
         phone = ""
 
-    pickup_dt = regex_value(
+   ```python
+    pickup_section = regex_value(
         normalized,
-        r"PickUp Details[\s\S]*?Date-Time[\s\S]*?([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        r"PickUp Details([\s\S]*?)Drop Off Details",
+        ""
     )
-    pickup_station = regex_value(normalized, r"PickUp Details.*?Station\s*([^\n]+)")
+
+    dropoff_section = regex_value(
+        normalized,
+        r"Drop Off Details([\s\S]*?)Product Code",
+        ""
+    )
+
+    pickup_dt = regex_value(
+        pickup_section,
+        r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        ""
+    )
+
+    pickup_station = regex_value(
+        pickup_section,
+        r"Station\s*([^\n]+)",
+        ""
+    )
 
     dropoff_dt = regex_value(
-        normalized,
-       r"Drop Off Details[\s\S]*?Date-Time[\s\S]*?([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        dropoff_section,
+        r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        ""
     )
-    dropoff_station = regex_value(normalized, r"Drop Off Details.*?Station\s*([^\n]+)")
+
+    dropoff_station = regex_value(
+        dropoff_section,
+        r"Station\s*([^\n]+)",
+        ""
+    )
+```
+
 
     car_group = regex_value(normalized, r"Car Group\s*\n([^\n\s/]+)")
     product_code = regex_value(normalized, r"Product Code\s*\n([^\n]+)")
