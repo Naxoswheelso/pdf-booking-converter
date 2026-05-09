@@ -117,24 +117,52 @@ def extract_station(section: str) -> str:
     return regex_value(section, r"Station\s*([^\n]+)", "")
 
 
-def extract_second_amount(text: str, label: str) -> float:
+def extract_extra_amount(text: str, label: str) -> float:
     """
-    For lines like:
-    Baby Seats 1 10
-    returns 10 (the amount after the quantity).
-    """
-    pattern = re.escape(label) + r"\s+[0-9]+(?:[\.,][0-9]+)?\s+([0-9]+(?:[\.,][0-9]+)?)"
-    return _to_float(regex_value(text, pattern, "0"))
+    Smart extraction for extra charges. Handles all PDF formats:
 
+    Format 1 - "Label qty amount" (zero values):
+        "Baby Seats 0 0" -> 0
+        "Child Seats 0 0" -> 0
 
-def extract_single_amount(text: str, label: str) -> float:
+    Format 2 - "Label qty amount" (with values, space preserved):
+        "Baby Seats 1 10" -> 10
+        "Add. Drivers 1 36.69" -> 36.69
+
+    Format 3 - "Label amount<qty>" (pypdf strips space, qty glued to amount):
+        "Add. Drivers 36.691" -> 36.69 (amount=36.69, qty=1)
+        "Baby Seats 12.402" -> 12.40 (amount=12.40, qty=2)
+
+    Format 4 - "Label amount" (single value, e.g. P.AI.):
+        "P.AI. 16.13" -> 16.13
+        "P.AI. 0" -> 0
     """
-    For lines like:
-    P.AI. 16.13
-    returns 16.13 (the single amount after the label).
-    """
-    pattern = re.escape(label) + r"\s+([0-9]+(?:[\.,][0-9]+)?)"
-    return _to_float(regex_value(text, pattern, "0"))
+    # Try Format 1/2 first: two separated numbers after label
+    pattern_two = re.escape(label) + r"\s+([0-9]+(?:[\.,][0-9]+)?)\s+([0-9]+(?:[\.,][0-9]+)?)"
+    match = re.search(pattern_two, text, re.IGNORECASE)
+    if match:
+        n2 = _to_float(match.group(2))
+        return n2
+
+    # Format 3/4: single number after label (may have qty glued)
+    pattern_one = re.escape(label) + r"\s+([0-9]+(?:[\.,][0-9]+)?)"
+    match = re.search(pattern_one, text, re.IGNORECASE)
+    if not match:
+        return 0.0
+
+    num_str = match.group(1).replace(",", ".")
+    if "." in num_str:
+        int_part, dec_part = num_str.split(".")
+        # If decimal part has 3+ digits, the last digit(s) are the quantity glued.
+        # Real amounts always have exactly 2 decimal places.
+        # e.g. "36.691" = amount 36.69 + qty 1
+        # e.g. "12.402" = amount 12.40 + qty 2
+        if len(dec_part) >= 3:
+            amount_str = f"{int_part}.{dec_part[:2]}"
+            return _to_float(amount_str)
+        return _to_float(num_str)
+
+    return _to_float(num_str)
 
 
 def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -194,21 +222,23 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
 
-    # Extras: PDF usually has "quantity amount" format. We export amount + 24% VAT.
-    baby_seats_amount = extract_second_amount(normalized, "Baby Seats")
-    child_seats_amount = extract_second_amount(normalized, "Child Seats")
-    infant_seats_amount = extract_second_amount(normalized, "Infant Seats")
-    booster_seats_amount = extract_second_amount(normalized, "Booster Seats")
-    add_drivers_amount = extract_second_amount(normalized, "Add. Drivers")
+    # Extras: smart extractor handles all PDF formats. Output amounts will get +24% VAT.
+    baby_seats_amount = extract_extra_amount(normalized, "Baby Seats")
+    child_seats_amount = extract_extra_amount(normalized, "Child Seats")
+    infant_seats_amount = extract_extra_amount(normalized, "Infant Seats")
+    booster_seats_amount = extract_extra_amount(normalized, "Booster Seats")
+    todler_seats_amount = extract_extra_amount(normalized, "Todler Seats")
+    add_drivers_amount = extract_extra_amount(normalized, "Add. Drivers")
 
-    # P.AI. has single amount format: "P.AI. 16.13"
-    pai_amount = extract_single_amount(normalized, "P.AI.")
+    # P.AI. uses single-amount format
+    pai_amount = extract_extra_amount(normalized, "P.AI.")
 
     # Convert all extras to gross (with VAT)
     add_drivers_gross = add_vat_24(add_drivers_amount)
     baby_seats_gross = add_vat_24(baby_seats_amount)
     infant_seats_gross = add_vat_24(infant_seats_amount)
-    booster_seats_gross = add_vat_24(booster_seats_amount)
+    # BOOSTERSEAT covers both "Booster Seats" and "Todler Seats" (same physical seat type)
+    booster_seats_gross = add_vat_24(booster_seats_amount + todler_seats_amount)
     child_seats_gross = add_vat_24(child_seats_amount)
     pai_gross = add_vat_24(pai_amount)
 
@@ -263,10 +293,10 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "extras_total": round(extras_total, 2),
         "extras_match_pay_on_arrival": abs(extras_total - pay_on_arrival) < 0.05,
 
-        "del_fee": add_vat_24(regex_value(normalized, r"Del Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "col_fee": add_vat_24(regex_value(normalized, r"Col Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "one_way_fee": add_vat_24(regex_value(normalized, r"One Way Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "night_fee": add_vat_24(regex_value(normalized, r"Night Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+        "del_fee": add_vat_24(extract_extra_amount(normalized, "Del Fee")),
+        "col_fee": add_vat_24(extract_extra_amount(normalized, "Col Fee")),
+        "one_way_fee": add_vat_24(extract_extra_amount(normalized, "One Way Fee")),
+        "night_fee": add_vat_24(extract_extra_amount(normalized, "Night Fee")),
 
         "raw_text": text,
     }
