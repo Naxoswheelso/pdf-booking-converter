@@ -342,6 +342,62 @@ def write_to_template(parsed: Dict[str, Any], template_file: Path | str, mapping
     return output.read()
 
 
+def write_many_to_template(
+    parsed_list: list[Dict[str, Any]],
+    template_file: Path | str,
+    mapping: Dict[str, Any],
+) -> bytes:
+    """
+    Writes multiple parsed bookings into a single Excel file,
+    one booking per row, sharing the same template headers.
+    """
+    wb = load_workbook(template_file)
+    ws = wb["Bookings"] if "Bookings" in wb.sheetnames else wb.active
+
+    headers = [cell.value for cell in ws[1] if cell.value]
+
+    # Clear any existing sample rows
+    for row_idx in range(ws.max_row, 1, -1):
+        ws.delete_rows(row_idx)
+
+    # Write each booking on its own row, starting from row 2
+    for i, parsed in enumerate(parsed_list):
+        row_data = build_output_row(headers, parsed, mapping)
+        row_idx = 2 + i
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row_idx, col_idx)
+            cell.value = row_data.get(header, "")
+            if isinstance(cell.value, datetime):
+                cell.number_format = "DD/MM/YYYY HH:MM"
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.read()
+
+
+def convert_many_pdfs_to_excel(
+    pdf_files: list,
+    template_file: Path | str = DEFAULT_TEMPLATE_FILE,
+    mapping_file: Path | str = DEFAULT_MAPPING_FILE,
+) -> tuple[bytes, list[Dict[str, Any]]]:
+    """
+    Convert multiple PDFs into a single combined Excel.
+    pdf_files: list of (filename, file_bytes_or_path) tuples or BytesIO objects.
+    Returns: (excel_bytes, list_of_parsed_dicts)
+    """
+    mapping = load_mapping(mapping_file)
+    parsed_list = []
+
+    for pdf_file in pdf_files:
+        text = pdf_to_text(pdf_file)
+        parsed = parse_booking_pdf_text(text, mapping)
+        parsed_list.append(parsed)
+
+    excel_bytes = write_many_to_template(parsed_list, template_file, mapping)
+    return excel_bytes, parsed_list
+
+
 def convert_pdf_to_excel(
     pdf_file: str | Path | BytesIO,
     template_file: Path | str = DEFAULT_TEMPLATE_FILE,
