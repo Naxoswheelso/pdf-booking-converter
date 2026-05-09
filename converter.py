@@ -190,7 +190,13 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     product_code = regex_value(normalized, r"Product Code\s*\n([^\n]+)")
     voucher_no = regex_value(normalized, r"Voucher No\s*\n([^\n]+)")
 
-    flight = regex_value(normalized, r"Flight\s*\n([^\n]+)")
+    # Flight can appear in two formats:
+    # 1) "Flight EZ1479" (value on same line) — Mykonos format
+    # 2) "Flight\nEZ1479" (value on next line) — older format
+    # 3) "Flight\n" with empty value (no flight number)
+    flight = regex_value(normalized, r"Flight\s+([A-Z0-9]+)\s*\n", "")
+    if not flight:
+        flight = regex_value(normalized, r"Flight\s*\n([^\n]+)")
     if flight in {"Drop Off Details", "Product Code", "Payment Method Voucher"}:
         flight = ""
 
