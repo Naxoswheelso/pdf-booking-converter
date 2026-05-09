@@ -1,0 +1,56 @@
+{
+  "fixed_values": {
+    "Status": "C",
+    "Agent Name": "SKYWARPEL TRADING LIMITED",
+    "Brand": "AB",
+    "Source": 0,
+    "Rate Code": 0,
+    "Ancilliaries with Taxes": "Y"
+  },
+  "station_code_map": {
+    "Mykonos Airport": "DRAF",
+    "Mykonos Port": "DRAF",
+    "Naxos Port": "NAXOS",
+    "Naxos Airport": "NAXOS",
+    "Paros Airport": "PAS",
+    "Paros Port": "PAS"
+  },
+  "station_location_map": {
+    "Mykonos Airport": "Airport",
+    "Mykonos Port": "PORT",
+    "Naxos Port": "PORT",
+    "Naxos Airport": "Airport",
+    "Paros Airport": "Airport",
+    "Paros Port": "PORT"
+  },
+  "field_mapping": {
+    "Res Number": "reservation_number",
+    "Confirmation number": "reservation_number",
+    "Voucher number": "voucher_no",
+    "Program": "program",
+    "Reservation Date/time": "reservation_datetime",
+    "Check-out Station": "pickup_station_code",
+    "Check-out Date/time": "pickup_datetime",
+    "Check-out Location": "pickup_location",
+    "Check-out Notes": "product_code",
+    "Flight": "flight",
+    "Check-in Station": "dropoff_station_code",
+    "Check-in Date/time": "dropoff_datetime",
+    "Check-in Location": "dropoff_location",
+    "Check-in Notes": "deposit",
+    "Excess": "excess",
+    "Car Group": "car_group",
+    "Driver Name": "driver_name",
+    "Memo": "phone",
+    "Total Amount": "total_amount",
+    "Voucher Amount": "voucher_value",
+    "Out of hours": "night_fee",
+    "Oneway": "one_way_fee",
+    "Delivery": "del_fee",
+    "Collection": "col_fee",
+    "ADD": "add_drivers",
+    "BBS": "baby_seats",
+    "INFANTSEAT": "infant_seats",
+    "BOOSTERSEAT": "child_seats"
+  }
+}
