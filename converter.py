@@ -15,6 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_MAPPING_FILE = BASE_DIR / "mapping.json"
 DEFAULT_TEMPLATE_FILE = BASE_DIR / "GenericBookingTemplate.xlsx"
 
+VAT_RATE = 1.24
+
 
 @dataclass
 class ConversionResult:
@@ -58,10 +60,10 @@ def _to_int_or_float(value: Any) -> Any:
 def add_vat_24(value: Any) -> float:
     """
     Adds 24% VAT to extra charges.
-    Example: 10 -> 12.40
+    Example: 16.13 -> 20.00
     """
     amount = _to_float(value, 0.0)
-    return round(amount * 1.24, 2) if amount else 0
+    return round(amount * VAT_RATE, 2) if amount else 0
 
 
 def parse_datetime(value: str | None) -> Optional[datetime]:
@@ -119,10 +121,19 @@ def extract_second_amount(text: str, label: str) -> float:
     """
     For lines like:
     Baby Seats 1 10
-    returns 10.
-    Then VAT is added later.
+    returns 10 (the amount after the quantity).
     """
     pattern = re.escape(label) + r"\s+[0-9]+(?:[\.,][0-9]+)?\s+([0-9]+(?:[\.,][0-9]+)?)"
+    return _to_float(regex_value(text, pattern, "0"))
+
+
+def extract_single_amount(text: str, label: str) -> float:
+    """
+    For lines like:
+    P.AI. 16.13
+    returns 16.13 (the single amount after the label).
+    """
+    pattern = re.escape(label) + r"\s+([0-9]+(?:[\.,][0-9]+)?)"
     return _to_float(regex_value(text, pattern, "0"))
 
 
@@ -183,11 +194,32 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
 
-    # Extras: PDF usually has "quantity amount". We export amount + 24% VAT.
+    # Extras: PDF usually has "quantity amount" format. We export amount + 24% VAT.
     baby_seats_amount = extract_second_amount(normalized, "Baby Seats")
     child_seats_amount = extract_second_amount(normalized, "Child Seats")
     infant_seats_amount = extract_second_amount(normalized, "Infant Seats")
+    booster_seats_amount = extract_second_amount(normalized, "Booster Seats")
     add_drivers_amount = extract_second_amount(normalized, "Add. Drivers")
+
+    # P.AI. has single amount format: "P.AI. 16.13"
+    pai_amount = extract_single_amount(normalized, "P.AI.")
+
+    # Convert all extras to gross (with VAT)
+    add_drivers_gross = add_vat_24(add_drivers_amount)
+    baby_seats_gross = add_vat_24(baby_seats_amount)
+    infant_seats_gross = add_vat_24(infant_seats_amount)
+    booster_seats_gross = add_vat_24(booster_seats_amount)
+    child_seats_gross = add_vat_24(child_seats_amount)
+    pai_gross = add_vat_24(pai_amount)
+
+    extras_total = (
+        add_drivers_gross
+        + baby_seats_gross
+        + infant_seats_gross
+        + booster_seats_gross
+        + child_seats_gross
+        + pai_gross
+    )
 
     parsed = {
         "driver_name": driver_name,
@@ -219,10 +251,18 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "reservation_datetime": reservation_datetime,
         "reservation_number": reservation_number,
 
-        "baby_seats": add_vat_24(baby_seats_amount),
-        "child_seats": add_vat_24(child_seats_amount),
-        "infant_seats": add_vat_24(infant_seats_amount),
-        "add_drivers": add_vat_24(add_drivers_amount),
+        # Extras with 24% VAT (gross amounts)
+        "add_drivers": add_drivers_gross,
+        "baby_seats": baby_seats_gross,
+        "infant_seats": infant_seats_gross,
+        "booster_seats": booster_seats_gross,
+        "child_seats": child_seats_gross,
+        "pai_amount": pai_gross,
+
+        # Sanity check: SUM of all extras should equal Pay On Arrival
+        "extras_total": round(extras_total, 2),
+        "extras_match_pay_on_arrival": abs(extras_total - pay_on_arrival) < 0.05,
+
         "del_fee": add_vat_24(regex_value(normalized, r"Del Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
         "col_fee": add_vat_24(regex_value(normalized, r"Col Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
         "one_way_fee": add_vat_24(regex_value(normalized, r"One Way Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
