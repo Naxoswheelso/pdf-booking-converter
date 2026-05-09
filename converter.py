@@ -97,13 +97,13 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
 
     pickup_dt = regex_value(
         normalized,
-        r"PickUp Details.*?Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        r"PickUp Details[\s\S]*?Date-Time[\s\S]*?([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
     )
     pickup_station = regex_value(normalized, r"PickUp Details.*?Station\s*([^\n]+)")
 
     dropoff_dt = regex_value(
         normalized,
-        r"Drop Off Details.*?Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+       r"Drop Off Details[\s\S]*?Date-Time[\s\S]*?([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
     )
     dropoff_station = regex_value(normalized, r"Drop Off Details.*?Station\s*([^\n]+)")
 
