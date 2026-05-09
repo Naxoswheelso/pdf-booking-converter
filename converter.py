@@ -59,6 +59,7 @@ def parse_datetime(value: str | None) -> Optional[datetime]:
     value = _clean(value)
     if not value:
         return None
+    value = re.sub(r"\s+", " ", value)
     for fmt in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"):
         try:
             return datetime.strptime(value, fmt)
@@ -77,6 +78,47 @@ def section_between(text: str, start_label: str, end_label: str) -> str:
     return regex_value(text, pattern, "")
 
 
+def extract_section_datetime(section: str) -> str:
+    # Format 1 from some PDFs:
+    # Date-Time
+    # 09/05/2026 13:30
+    value = regex_value(
+        section,
+        r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        ""
+    )
+    if value:
+        return value
+
+    # Format 2 from pypdf extraction:
+    # 09/05/2026   13:30Date-Time
+    value = regex_value(
+        section,
+        r"([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9]{2}:[0-9]{2})\s*Date-Time",
+        ""
+    )
+    if value:
+        match = re.search(
+            r"([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9]{2}:[0-9]{2})\s*Date-Time",
+            section,
+            re.IGNORECASE | re.MULTILINE | re.DOTALL
+        )
+        if match:
+            return f"{match.group(1)} {match.group(2)}"
+
+    # Generic fallback: first datetime inside the section.
+    value = regex_value(
+        section,
+        r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
+        ""
+    )
+    return value
+
+
+def extract_station(section: str) -> str:
+    return regex_value(section, r"Station\s*([^\n]+)", "")
+
+
 def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     mapping = mapping or load_mapping()
 
@@ -92,27 +134,11 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     pickup_section = section_between(normalized, "PickUp Details", "Drop Off Details")
     dropoff_section = section_between(normalized, "Drop Off Details", "Product Code")
 
-    pickup_dt = regex_value(
-        pickup_section,
-        r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
-        ""
-    )
-    pickup_station = regex_value(
-        pickup_section,
-        r"Station\s*([^\n]+)",
-        ""
-    )
+    pickup_dt = extract_section_datetime(pickup_section)
+    dropoff_dt = extract_section_datetime(dropoff_section)
 
-    dropoff_dt = regex_value(
-        dropoff_section,
-        r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
-        ""
-    )
-    dropoff_station = regex_value(
-        dropoff_section,
-        r"Station\s*([^\n]+)",
-        ""
-    )
+    pickup_station = extract_station(pickup_section)
+    dropoff_station = extract_station(dropoff_section)
 
     car_group = regex_value(normalized, r"Car Group\s*\n([^\n\s/]+)")
     product_code = regex_value(normalized, r"Product Code\s*\n([^\n]+)")
@@ -137,9 +163,15 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
 
     reservation_number = regex_value(
         normalized,
-        r"Reservation\s+([0-9]+)",
+        r"Reservation\s+(?:Last Change)?\s*([0-9]+)",
         ""
     )
+    if not reservation_number:
+        reservation_number = regex_value(
+            normalized,
+            r"Reservation\s+Last Change\s*([0-9]+)",
+            ""
+        )
 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
