@@ -72,8 +72,14 @@ def regex_value(text: str, pattern: str, default: str = "") -> str:
     return _clean(match.group(1)) if match else default
 
 
+def section_between(text: str, start_label: str, end_label: str) -> str:
+    pattern = re.escape(start_label) + r"([\s\S]*?)" + re.escape(end_label)
+    return regex_value(text, pattern, "")
+
+
 def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     mapping = mapping or load_mapping()
+
     lines = [_clean(line) for line in text.splitlines() if _clean(line)]
     normalized = "\n".join(lines)
 
@@ -83,24 +89,14 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     if not re.search(r"\d", phone):
         phone = ""
 
-    pickup_section = regex_value(
-        normalized,
-        r"PickUp Details([\s\S]*?)Drop Off Details",
-        ""
-    )
-
-    dropoff_section = regex_value(
-        normalized,
-        r"Drop Off Details([\s\S]*?)Product Code",
-        ""
-    )
+    pickup_section = section_between(normalized, "PickUp Details", "Drop Off Details")
+    dropoff_section = section_between(normalized, "Drop Off Details", "Product Code")
 
     pickup_dt = regex_value(
         pickup_section,
         r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
         ""
     )
-
     pickup_station = regex_value(
         pickup_section,
         r"Station\s*([^\n]+)",
@@ -112,7 +108,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
         ""
     )
-
     dropoff_station = regex_value(
         dropoff_section,
         r"Station\s*([^\n]+)",
@@ -122,6 +117,7 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     car_group = regex_value(normalized, r"Car Group\s*\n([^\n\s/]+)")
     product_code = regex_value(normalized, r"Product Code\s*\n([^\n]+)")
     voucher_no = regex_value(normalized, r"Voucher No\s*\n([^\n]+)")
+
     flight = regex_value(normalized, r"Flight\s*\n([^\n]+)")
     if flight in {"Drop Off Details", "Product Code", "Payment Method Voucher"}:
         flight = ""
@@ -132,9 +128,18 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     total_amount = total_amount_pdf or (voucher_value + pay_on_arrival)
 
     reservation_datetime = parse_datetime(
-        regex_value(normalized, r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})\s+Confirmed")
+        regex_value(
+            normalized,
+            r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})\s+Confirmed",
+            ""
+        )
     )
-    reservation_number = regex_value(normalized, r"Reservation\s+([0-9]+)")
+
+    reservation_number = regex_value(
+        normalized,
+        r"Reservation\s+([0-9]+)",
+        ""
+    )
 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
@@ -143,25 +148,32 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "driver_name": driver_name,
         "phone": phone,
         "car_group": car_group,
+
         "pickup_datetime": parse_datetime(pickup_dt),
         "pickup_station": pickup_station,
         "pickup_station_code": station_code_map.get(pickup_station, ""),
         "pickup_location": station_location_map.get(pickup_station, ""),
+
         "dropoff_datetime": parse_datetime(dropoff_dt),
         "dropoff_station": dropoff_station,
         "dropoff_station_code": station_code_map.get(dropoff_station, ""),
         "dropoff_location": station_location_map.get(dropoff_station, ""),
+
         "product_code": product_code,
         "voucher_no": voucher_no,
         "flight": flight,
+
         "voucher_value": voucher_value,
         "pay_on_arrival": pay_on_arrival,
         "total_amount": total_amount,
         "program": "pp" if voucher_value > 0 else "POA",
+
         "excess": _to_int_or_float(regex_value(normalized, r"EXCESS\s*([0-9]+(?:[\.,][0-9]+)?)")),
         "deposit": _to_int_or_float(regex_value(normalized, r"Deposit\s*([0-9]+(?:[\.,][0-9]+)?)")),
+
         "reservation_datetime": reservation_datetime,
         "reservation_number": reservation_number,
+
         "baby_seats": _to_int_or_float(regex_value(normalized, r"Baby Seats\s*([0-9]+)")),
         "child_seats": _to_int_or_float(regex_value(normalized, r"Child Seats\s*([0-9]+)")),
         "infant_seats": _to_int_or_float(regex_value(normalized, r"Infant Seats\s*([0-9]+)")),
@@ -170,8 +182,10 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "col_fee": _to_float(regex_value(normalized, r"Col Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
         "one_way_fee": _to_float(regex_value(normalized, r"One Way Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
         "night_fee": _to_float(regex_value(normalized, r"Night Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+
         "raw_text": text,
     }
+
     return parsed
 
 
@@ -224,6 +238,7 @@ def convert_pdf_to_excel(
     parsed = parse_booking_pdf_text(text, mapping)
     excel_bytes = write_to_template(parsed, template_file, mapping)
     res_no = parsed.get("reservation_number") or "booking"
+
     return ConversionResult(
         excel_bytes=excel_bytes,
         parsed=parsed,
