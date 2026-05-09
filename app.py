@@ -3,7 +3,11 @@ from io import BytesIO
 
 import streamlit as st
 
-from converter import DEFAULT_MAPPING_FILE, DEFAULT_TEMPLATE_FILE, convert_pdf_to_excel, pdf_to_text, parse_booking_pdf_text, load_mapping
+from converter import (
+    DEFAULT_MAPPING_FILE,
+    DEFAULT_TEMPLATE_FILE,
+    convert_pdf_to_excel,
+)
 
 st.set_page_config(page_title="PDF Booking Converter", page_icon="🚗", layout="centered")
 
@@ -14,7 +18,7 @@ uploaded_file = st.file_uploader("Ανέβασε PDF κράτησης", type=["p
 
 with st.expander("Mapping / Ρυθμίσεις", expanded=False):
     st.code(DEFAULT_MAPPING_FILE.read_text(encoding="utf-8"), language="json")
-    st.info("Για αλλαγές στο mapping, άνοιξε το αρχείο mapping.json στο GitHub και κάνε edit.")
+    st.info("Για αλλαγές στο mapping, άνοιξε το αρχείο mapping.json και κάνε edit.")
 
 if uploaded_file:
     pdf_bytes = uploaded_file.read()
@@ -25,6 +29,19 @@ if uploaded_file:
             st.success("Το Excel δημιουργήθηκε επιτυχώς.")
 
             preview = {k: v for k, v in result.parsed.items() if k != "raw_text"}
+
+            # Highlight whether extras match Pay On Arrival
+            if preview.get("extras_match_pay_on_arrival"):
+                st.success(
+                    f"✅ Extras Total ({preview.get('extras_total')}) = "
+                    f"Pay On Arrival ({preview.get('pay_on_arrival')})"
+                )
+            else:
+                st.warning(
+                    f"⚠️ Extras Total ({preview.get('extras_total')}) ≠ "
+                    f"Pay On Arrival ({preview.get('pay_on_arrival')}) — έλεγξε το PDF"
+                )
+
             st.subheader("Parsed στοιχεία")
             st.json(preview, expanded=False)
 
