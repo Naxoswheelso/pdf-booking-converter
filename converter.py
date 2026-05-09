@@ -224,10 +224,13 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
 
     # Extras: smart extractor handles all PDF formats. Output amounts will get +24% VAT.
     baby_seats_amount = extract_extra_amount(normalized, "Baby Seats")
-    child_seats_amount = extract_extra_amount(normalized, "Child Seats")
+    # Child seat (CS) catches all "child-sized" seats from PDF: Child, Booster, Todler
+    child_seats_amount = (
+        extract_extra_amount(normalized, "Child Seats")
+        + extract_extra_amount(normalized, "Booster Seats")
+        + extract_extra_amount(normalized, "Todler Seats")
+    )
     infant_seats_amount = extract_extra_amount(normalized, "Infant Seats")
-    booster_seats_amount = extract_extra_amount(normalized, "Booster Seats")
-    todler_seats_amount = extract_extra_amount(normalized, "Todler Seats")
     add_drivers_amount = extract_extra_amount(normalized, "Add. Drivers")
 
     # P.AI. uses single-amount format
@@ -237,8 +240,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     add_drivers_gross = add_vat_24(add_drivers_amount)
     baby_seats_gross = add_vat_24(baby_seats_amount)
     infant_seats_gross = add_vat_24(infant_seats_amount)
-    # BOOSTERSEAT covers both "Booster Seats" and "Todler Seats" (same physical seat type)
-    booster_seats_gross = add_vat_24(booster_seats_amount + todler_seats_amount)
     child_seats_gross = add_vat_24(child_seats_amount)
     pai_gross = add_vat_24(pai_amount)
 
@@ -246,7 +247,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         add_drivers_gross
         + baby_seats_gross
         + infant_seats_gross
-        + booster_seats_gross
         + child_seats_gross
         + pai_gross
     )
@@ -285,7 +285,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "add_drivers": add_drivers_gross,
         "baby_seats": baby_seats_gross,
         "infant_seats": infant_seats_gross,
-        "booster_seats": booster_seats_gross,
         "child_seats": child_seats_gross,
         "pai_amount": pai_gross,
 

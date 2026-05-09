@@ -50,8 +50,7 @@
     "Collection": "col_fee",
     "ADD": "add_drivers",
     "BBS": "baby_seats",
-    "INFANTSEAT": "infant_seats",
-    "BOOSTERSEAT": "booster_seats",
+    "IS": "infant_seats",
     "CS": "child_seats",
     "YD": "pai_amount"
   }
