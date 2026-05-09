@@ -67,17 +67,6 @@ def parse_datetime(value: str | None) -> Optional[datetime]:
     return None
 
 
-def find_between_lines(lines: list[str], start_label: str, end_label: Optional[str] = None) -> str:
-    try:
-        idx = lines.index(start_label)
-    except ValueError:
-        return ""
-    if end_label and end_label in lines[idx + 1:]:
-        end_idx = idx + 1 + lines[idx + 1:].index(end_label)
-        return " ".join(lines[idx + 1:end_idx]).strip()
-    return lines[idx + 1].strip() if idx + 1 < len(lines) else ""
-
-
 def regex_value(text: str, pattern: str, default: str = "") -> str:
     match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
     return _clean(match.group(1)) if match else default
@@ -90,12 +79,10 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
 
     driver_name = lines[0] if lines else ""
 
-    # Phone in current PDF format is the line after Born Date / before Address or Car Group.
     phone = regex_value(normalized, r"Born Date\s*0\s*\n([^\n]+)", "")
     if not re.search(r"\d", phone):
         phone = ""
 
-  
     pickup_section = regex_value(
         normalized,
         r"PickUp Details([\s\S]*?)Drop Off Details",
@@ -132,7 +119,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         ""
     )
 
-
     car_group = regex_value(normalized, r"Car Group\s*\n([^\n\s/]+)")
     product_code = regex_value(normalized, r"Product Code\s*\n([^\n]+)")
     voucher_no = regex_value(normalized, r"Voucher No\s*\n([^\n]+)")
@@ -145,8 +131,10 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     total_amount_pdf = _to_float(regex_value(normalized, r"Total Amount\s*([0-9]+(?:[\.,][0-9]+)?)"))
     total_amount = total_amount_pdf or (voucher_value + pay_on_arrival)
 
-    reservation_datetime = parse_datetime(regex_value(normalized, r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})\s+Confirmed"))
-    reservation_number = regex_value(normalized, r"Reservation\s+(?:Last Change)?\s*([0-9]+)")
+    reservation_datetime = parse_datetime(
+        regex_value(normalized, r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})\s+Confirmed")
+    )
+    reservation_number = regex_value(normalized, r"Reservation\s+([0-9]+)")
 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
@@ -210,7 +198,6 @@ def write_to_template(parsed: Dict[str, Any], template_file: Path | str, mapping
     headers = [cell.value for cell in ws[1] if cell.value]
     row_data = build_output_row(headers, parsed, mapping)
 
-    # Clear previous sample rows while keeping template header/style.
     for row_idx in range(ws.max_row, 1, -1):
         ws.delete_rows(row_idx)
 
