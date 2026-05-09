@@ -95,7 +95,7 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     if not re.search(r"\d", phone):
         phone = ""
 
-   ```python
+  
     pickup_section = regex_value(
         normalized,
         r"PickUp Details([\s\S]*?)Drop Off Details",
@@ -131,7 +131,6 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         r"Station\s*([^\n]+)",
         ""
     )
-```
 
 
     car_group = regex_value(normalized, r"Car Group\s*\n([^\n\s/]+)")
