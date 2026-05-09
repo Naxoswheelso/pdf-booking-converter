@@ -55,6 +55,15 @@ def _to_int_or_float(value: Any) -> Any:
     return int(num) if float(num).is_integer() else num
 
 
+def add_vat_24(value: Any) -> float:
+    """
+    Adds 24% VAT to extra charges.
+    Example: 10 -> 12.40
+    """
+    amount = _to_float(value, 0.0)
+    return round(amount * 1.24, 2) if amount else 0
+
+
 def parse_datetime(value: str | None) -> Optional[datetime]:
     value = _clean(value)
     if not value:
@@ -79,9 +88,6 @@ def section_between(text: str, start_label: str, end_label: str) -> str:
 
 
 def extract_section_datetime(section: str) -> str:
-    # Format 1 from some PDFs:
-    # Date-Time
-    # 09/05/2026 13:30
     value = regex_value(
         section,
         r"Date-Time\s*([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
@@ -90,33 +96,34 @@ def extract_section_datetime(section: str) -> str:
     if value:
         return value
 
-    # Format 2 from pypdf extraction:
-    # 09/05/2026   13:30Date-Time
-    value = regex_value(
-        section,
+    match = re.search(
         r"([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9]{2}:[0-9]{2})\s*Date-Time",
-        ""
+        section,
+        re.IGNORECASE | re.MULTILINE | re.DOTALL
     )
-    if value:
-        match = re.search(
-            r"([0-9]{2}/[0-9]{2}/[0-9]{4})\s+([0-9]{2}:[0-9]{2})\s*Date-Time",
-            section,
-            re.IGNORECASE | re.MULTILINE | re.DOTALL
-        )
-        if match:
-            return f"{match.group(1)} {match.group(2)}"
+    if match:
+        return f"{match.group(1)} {match.group(2)}"
 
-    # Generic fallback: first datetime inside the section.
-    value = regex_value(
+    return regex_value(
         section,
         r"([0-9]{2}/[0-9]{2}/[0-9]{4}\s+[0-9]{2}:[0-9]{2})",
         ""
     )
-    return value
 
 
 def extract_station(section: str) -> str:
     return regex_value(section, r"Station\s*([^\n]+)", "")
+
+
+def extract_second_amount(text: str, label: str) -> float:
+    """
+    For lines like:
+    Baby Seats 1 10
+    returns 10.
+    Then VAT is added later.
+    """
+    pattern = re.escape(label) + r"\s+[0-9]+(?:[\.,][0-9]+)?\s+([0-9]+(?:[\.,][0-9]+)?)"
+    return _to_float(regex_value(text, pattern, "0"))
 
 
 def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -176,6 +183,12 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
     station_code_map = mapping.get("station_code_map", {})
     station_location_map = mapping.get("station_location_map", {})
 
+    # Extras: PDF usually has "quantity amount". We export amount + 24% VAT.
+    baby_seats_amount = extract_second_amount(normalized, "Baby Seats")
+    child_seats_amount = extract_second_amount(normalized, "Child Seats")
+    infant_seats_amount = extract_second_amount(normalized, "Infant Seats")
+    add_drivers_amount = extract_second_amount(normalized, "Add. Drivers")
+
     parsed = {
         "driver_name": driver_name,
         "phone": phone,
@@ -206,14 +219,14 @@ def parse_booking_pdf_text(text: str, mapping: Optional[Dict[str, Any]] = None) 
         "reservation_datetime": reservation_datetime,
         "reservation_number": reservation_number,
 
-        "baby_seats": _to_int_or_float(regex_value(normalized, r"Baby Seats\s*([0-9]+)")),
-        "child_seats": _to_int_or_float(regex_value(normalized, r"Child Seats\s*([0-9]+)")),
-        "infant_seats": _to_int_or_float(regex_value(normalized, r"Infant Seats\s*([0-9]+)")),
-        "add_drivers": _to_int_or_float(regex_value(normalized, r"Add\. Drivers\s*([0-9]+)")),
-        "del_fee": _to_float(regex_value(normalized, r"Del Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "col_fee": _to_float(regex_value(normalized, r"Col Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "one_way_fee": _to_float(regex_value(normalized, r"One Way Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
-        "night_fee": _to_float(regex_value(normalized, r"Night Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+        "baby_seats": add_vat_24(baby_seats_amount),
+        "child_seats": add_vat_24(child_seats_amount),
+        "infant_seats": add_vat_24(infant_seats_amount),
+        "add_drivers": add_vat_24(add_drivers_amount),
+        "del_fee": add_vat_24(regex_value(normalized, r"Del Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+        "col_fee": add_vat_24(regex_value(normalized, r"Col Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+        "one_way_fee": add_vat_24(regex_value(normalized, r"One Way Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
+        "night_fee": add_vat_24(regex_value(normalized, r"Night Fee\s*([0-9]+(?:[\.,][0-9]+)?)")),
 
         "raw_text": text,
     }
